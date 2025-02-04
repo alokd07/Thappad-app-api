@@ -1,13 +1,20 @@
-// app.js
-
 const express = require('express');
-const db = require('./database'); // Import database connection
+const sqlite3 = require('sqlite3').verbose(); // Import SQLite3 for database
+// const cors = require('cors'); // Correct CORS import
 const app = express();
-const cors = cors();
 
-// Use JSON parsing middleware
+// Set up the SQLite database
+const db = new sqlite3.Database('./database.db', (err) => {
+  if (err) {
+    console.error("Error opening database:", err.message);
+  } else {
+    console.log('Connected to the SQLite database');
+  }
+});
+
+// Middleware
 app.use(express.json());
-app.use(cors());
+// app.use(cors());
 
 // Route to save data to the database
 app.post('/save', (req, res) => {
