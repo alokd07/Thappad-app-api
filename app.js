@@ -1,20 +1,43 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // Import SQLite3 for database
-// const cors = require('cors'); // Correct CORS import
-const app = express();
+const { Client } = require('pg'); // PostgreSQL client
+const cors = require('cors');
 
-// Set up the SQLite database
-const db = new sqlite3.Database('./database.db', (err) => {
-  if (err) {
-    console.error("Error opening database:", err.message);
-  } else {
-    console.log('Connected to the SQLite database');
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+// Set up PostgreSQL client
+const client = new Client({
+  connectionString: "postgres://thappad_user:xAdDgifOSNlvAML8iA6QRBcrEaSOPSa5@dpg-cuh48jhu0jms73fuc290-a:5432/thappad", // Database URL from Render
+  ssl: {
+    rejectUnauthorized: false // Required for Render SSL connection
   }
 });
 
-// Middleware
-app.use(express.json());
-// app.use(cors());
+client.connect()
+  .then(() => console.log('Connected to PostgreSQL database'))
+  .catch((err) => console.error('Database connection error:', err));
+
+
+  const createTableIfNotExists = async () => {
+    const query = `
+      CREATE TABLE IF NOT EXISTS items (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        price DECIMAL(10, 2) NOT NULL,
+        date DATE NOT NULL
+      );
+    `;
+    try {
+      await client.query(query);
+      console.log('Table "items" is ready');
+    } catch (err) {
+      console.error('Error creating table:', err);
+    }
+  };
+  
+  // Call the function to ensure the table exists when the server starts
+  createTableIfNotExists();
 
 // Route to save data to the database
 app.post('/save', (req, res) => {
@@ -24,13 +47,13 @@ app.post('/save', (req, res) => {
     return res.status(400).json({ message: 'Missing required fields' });
   }
 
-  const query = 'INSERT INTO items (title, price, date) VALUES (?, ?, ?)';
-  db.run(query, [title, price, date], function (err) {
+  const query = 'INSERT INTO items (title, price, date) VALUES ($1, $2, $3) RETURNING *';
+  client.query(query, [title, price, date], (err, result) => {
     if (err) {
       return res.status(500).json({ message: 'Database error', error: err });
     }
 
-    return res.status(200).json({ id: this.lastID, title, price, date });
+    return res.status(200).json(result.rows[0]); // Send the inserted row
   });
 });
 
@@ -38,12 +61,12 @@ app.post('/save', (req, res) => {
 app.get('/items', (req, res) => {
   const query = 'SELECT * FROM items';
 
-  db.all(query, [], (err, rows) => {
+  client.query(query, (err, result) => {
     if (err) {
       return res.status(500).json({ message: 'Database error', error: err });
     }
 
-    res.status(200).json(rows);
+    res.status(200).json(result.rows); // Send all rows
   });
 });
 
