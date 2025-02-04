@@ -1,0 +1,24 @@
+# Node.js
+node_modules/
+
+# SQLite database file
+database.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Vercel or Heroku configurations (if applicable)
+.vscode/
+*.env
+
+# NPM logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
