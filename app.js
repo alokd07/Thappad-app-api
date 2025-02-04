@@ -41,11 +41,13 @@ client.connect()
 
 // Route to save data to the database
 app.post('/save', (req, res) => {
-  const { title, price, date } = req.body;
+  const { title, price } = req.body;
 
-  if (!title || !price || !date) {
+  if (!title || !price) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
+
+  const date = new Date().toISOString().split('T')[0]; // Get the current date
 
   const query = 'INSERT INTO items (title, price, date) VALUES ($1, $2, $3) RETURNING *';
   client.query(query, [title, price, date], (err, result) => {
