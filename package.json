@@ -1,18 +1,30 @@
 {
-  
+  "name": "thappad-app-api",
+  "version": "1.0.0",
+  "description": "API for Thappad App",
+  "main": "index.ts",
+  "scripts": {
+    "start": "tsx index.ts",
+    "dev": "tsx watch index.ts",
+    "migrate": "drizzle-kit push"
+  },
+  "author": "Alok Dubey",
+  "license": "ISC",
   "dependencies": {
-  
-    
-  "cors": "^2.8.5",
-  
-    
-  "express": "^4.21.2",
-  
-    
-  "pg": "^8.13.1",
-  
-    
-  "sqlite3": "^5.1.7"
-  
+    "@libsql/client": "^0.15.10",
+    "@types/node": "^24.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "drizzle-orm": "^0.44.4",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "sqlite3": "^5.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.3"
   }
 }
