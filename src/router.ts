@@ -162,10 +162,10 @@ router.post('/send-thappad', async (req: Request, res: Response) => {
         });
     }
     
-    if (!['slap', 'leg', 'mukka', 'love'].includes(type)) {
+    if (!['slap', 'leg', 'mukka', 'love', 'xoxo'].includes(type)) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Invalid thappad type. Must be: slap, leg, mukka, or love' 
+            message: 'Invalid thappad type. Must be: slap, leg, mukka, love, or xoxo' 
         });
     }
     
