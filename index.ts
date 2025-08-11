@@ -161,6 +161,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // 404 handler
 app.use('*', (req, res) => {
+  console.log('404 Not Found:', req.originalUrl);
   res.status(404).json({ message: 'Route not found' });
 });
 
