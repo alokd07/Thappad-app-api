@@ -86,6 +86,19 @@ const initializeDatabase = async () => {
         FOREIGN KEY (userId) REFERENCES users (id)
       );
     `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS friends (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        friendId INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users (id),
+        FOREIGN KEY (friendId) REFERENCES users (id)
+      );
+    `);
     
     console.log('All tables are ready');
   } catch (error) {
