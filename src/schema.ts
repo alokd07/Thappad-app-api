@@ -59,3 +59,12 @@ export const userDevices = sqliteTable('userDevices', {
   createdAt: text('createdAt').notNull(),
   updatedAt: text('updatedAt').notNull(),
 });
+
+export const friends = sqliteTable('friends', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('userId').notNull().references(() => users.id),
+  friendId: integer('friendId').notNull().references(() => users.id),
+  status: text('status').notNull(), // 'pending', 'accepted', 'blocked'
+  createdAt: text('createdAt').notNull(),
+  updatedAt: text('updatedAt').notNull(),
+});

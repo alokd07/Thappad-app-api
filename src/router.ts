@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
-import { users, thappads, notifications, userDevices } from './schema';
+import { users, thappads, notifications, userDevices, friends } from './schema';
 import { eq, and, desc, or, ne } from 'drizzle-orm';
 import PushNotificationService from './pushNotificationService';
 
@@ -153,7 +153,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
 // Send Thappad
 router.post('/send-thappad', async (req: Request, res: Response) => {
-    const { senderId, receiverId, title, message, type } = req.body;
+    const { senderId, receiverId, title, message, type, imageUrl } = req.body;
     
     if (!senderId || !receiverId || !title || !type) {
         return res.status(400).json({ 
@@ -192,6 +192,26 @@ router.post('/send-thappad', async (req: Request, res: Response) => {
             });
         }
         
+        // Check if users are friends
+        const friendship = await db.select().from(friends)
+            .where(
+                and(
+                    or(
+                        and(eq(friends.userId, senderId), eq(friends.friendId, receiverId)),
+                        and(eq(friends.userId, receiverId), eq(friends.friendId, senderId))
+                    ),
+                    eq(friends.status, 'accepted')
+                )
+            )
+            .limit(1);
+        
+        if (friendship.length === 0) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'You can only send thappads to your friends. Please send a friend request first.' 
+            });
+        }
+        
         // Create thappad record
         const newThappad = await db.insert(thappads).values({
             senderId,
@@ -214,7 +234,8 @@ router.post('/send-thappad', async (req: Request, res: Response) => {
                 senderName: sender[0].name,
                 type: 'thappad',
                 title,
-                message
+                message,
+                imageUrl: imageUrl || null
             }),
             type: 'thappad',
             isRead: 0,
@@ -660,6 +681,352 @@ router.delete('/api/notifications/:notificationId', async (req: Request, res: Re
     console.error('Error deleting notification:', error);
     return res.status(500).json({ error: 'Failed to delete notification' });
   }
+});
+
+// Friend Management Endpoints
+
+// Send friend request
+router.post('/friends/request', async (req: Request, res: Response) => {
+    const { userId, friendId } = req.body;
+    
+    if (!userId || !friendId) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Missing userId or friendId' 
+        });
+    }
+    
+    if (userId === friendId) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Cannot send friend request to yourself' 
+        });
+    }
+    
+    try {
+        const db = getDbConnection();
+        
+        // Check if friend request already exists
+        const existingRequest = await db.select().from(friends)
+            .where(
+                or(
+                    and(eq(friends.userId, userId), eq(friends.friendId, friendId)),
+                    and(eq(friends.userId, friendId), eq(friends.friendId, userId))
+                )
+            )
+            .limit(1);
+        
+        if (existingRequest.length > 0) {
+            return res.status(409).json({ 
+                success: false, 
+                message: 'Friend request already exists or users are already friends' 
+            });
+        }
+        
+        // Verify both users exist
+        const [user, friend] = await Promise.all([
+            db.select().from(users).where(eq(users.id, userId)).limit(1),
+            db.select().from(users).where(eq(users.id, friendId)).limit(1)
+        ]);
+        
+        if (user.length === 0 || friend.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User not found' 
+            });
+        }
+        
+        // Create friend request
+        await db.insert(friends).values({
+            userId,
+            friendId,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        
+        // Create notification for the friend
+        await db.insert(notifications).values({
+            userId: friendId,
+            title: 'Friend Request',
+            body: `${user[0].name} sent you a friend request`,
+            data: JSON.stringify({
+                type: 'friend_request',
+                userId,
+                userName: user[0].name
+            }),
+            type: 'system',
+            isRead: 0,
+            createdAt: new Date().toISOString()
+        });
+        
+        // Send push notification if friend has a push token
+        if (friend[0].expoPushToken) {
+            await PushNotificationService.sendNotification({
+                to: friend[0].expoPushToken,
+                sound: 'default',
+                title: 'Friend Request',
+                body: `${user[0].name} sent you a friend request`,
+                data: {
+                    type: 'friend_request',
+                    userId,
+                    userName: user[0].name
+                }
+            });
+        }
+        
+        res.status(200).json({ 
+            success: true, 
+            message: 'Friend request sent successfully' 
+        });
+    } catch (err) {
+        console.error('Send friend request error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error sending friend request', 
+            error: err 
+        });
+    }
+});
+
+// Accept friend request
+router.post('/friends/accept', async (req: Request, res: Response) => {
+    const { requestId } = req.body;
+    
+    if (!requestId) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Missing requestId' 
+        });
+    }
+    
+    try {
+        const db = getDbConnection();
+        
+        // Get the friend request
+        const request = await db.select().from(friends)
+            .where(eq(friends.id, requestId))
+            .limit(1);
+        
+        if (request.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Friend request not found' 
+            });
+        }
+        
+        if (request[0].status !== 'pending') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Friend request is not pending' 
+            });
+        }
+        
+        // Update the request status
+        await db.update(friends)
+            .set({ 
+                status: 'accepted',
+                updatedAt: new Date().toISOString()
+            })
+            .where(eq(friends.id, requestId));
+        
+        res.status(200).json({ 
+            success: true, 
+            message: 'Friend request accepted' 
+        });
+    } catch (err) {
+        console.error('Accept friend request error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error accepting friend request', 
+            error: err 
+        });
+    }
+});
+
+// Get user's friends
+router.get('/friends/:userId', async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    
+    try {
+        const db = getDbConnection();
+        const userIdInt = parseInt(userId);
+        
+        // Get all accepted friendships where user is either the requester or recipient
+        const friendships = await db.select({
+            id: friends.id,
+            userId: friends.userId,
+            friendId: friends.friendId,
+            status: friends.status,
+            createdAt: friends.createdAt
+        })
+        .from(friends)
+        .where(
+            and(
+                or(
+                    eq(friends.userId, userIdInt),
+                    eq(friends.friendId, userIdInt)
+                ),
+                eq(friends.status, 'accepted')
+            )
+        );
+        
+        // Get friend details
+        const friendDetails = await Promise.all(
+            friendships.map(async (friendship) => {
+                const friendUserId = friendship.userId === userIdInt ? friendship.friendId : friendship.userId;
+                const friendUser = await db.select({
+                    id: users.id,
+                    name: users.name,
+                    email: users.email,
+                    createdAt: users.createdAt
+                })
+                .from(users)
+                .where(eq(users.id, friendUserId))
+                .limit(1);
+                
+                return friendUser[0];
+            })
+        );
+        
+        res.status(200).json({ 
+            success: true, 
+            data: friendDetails 
+        });
+    } catch (err) {
+        console.error('Get friends error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error fetching friends', 
+            error: err 
+        });
+    }
+});
+
+// Get pending friend requests
+router.get('/friends/requests/:userId', async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    
+    try {
+        const db = getDbConnection();
+        const userIdInt = parseInt(userId);
+        
+        // Get pending requests where user is the recipient
+        const requests = await db.select({
+            id: friends.id,
+            userId: friends.userId,
+            friendId: friends.friendId,
+            status: friends.status,
+            createdAt: friends.createdAt
+        })
+        .from(friends)
+        .where(
+            and(
+                eq(friends.friendId, userIdInt),
+                eq(friends.status, 'pending')
+            )
+        );
+        
+        // Get requester details
+        const requestDetails = await Promise.all(
+            requests.map(async (request) => {
+                const requesterUser = await db.select({
+                    id: users.id,
+                    name: users.name,
+                    email: users.email,
+                    createdAt: users.createdAt
+                })
+                .from(users)
+                .where(eq(users.id, request.userId))
+                .limit(1);
+                
+                return {
+                    requestId: request.id,
+                    requester: requesterUser[0],
+                    createdAt: request.createdAt
+                };
+            })
+        );
+        
+        res.status(200).json({ 
+            success: true, 
+            data: requestDetails 
+        });
+    } catch (err) {
+        console.error('Get friend requests error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error fetching friend requests', 
+            error: err 
+        });
+    }
+});
+
+// Remove friend
+router.delete('/friends/:userId/:friendId', async (req: Request, res: Response) => {
+    const { userId, friendId } = req.params;
+    
+    try {
+        const db = getDbConnection();
+        const userIdInt = parseInt(userId);
+        const friendIdInt = parseInt(friendId);
+        
+        // Remove friendship (both directions)
+        await db.delete(friends)
+            .where(
+                or(
+                    and(eq(friends.userId, userIdInt), eq(friends.friendId, friendIdInt)),
+                    and(eq(friends.userId, friendIdInt), eq(friends.friendId, userIdInt))
+                )
+            );
+        
+        res.status(200).json({ 
+            success: true, 
+            message: 'Friend removed successfully' 
+        });
+    } catch (err) {
+        console.error('Remove friend error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error removing friend', 
+            error: err 
+        });
+    }
+});
+
+// Check if users are friends
+router.get('/friends/check/:userId/:friendId', async (req: Request, res: Response) => {
+    const { userId, friendId } = req.params;
+    
+    try {
+        const db = getDbConnection();
+        const userIdInt = parseInt(userId);
+        const friendIdInt = parseInt(friendId);
+        
+        const friendship = await db.select().from(friends)
+            .where(
+                and(
+                    or(
+                        and(eq(friends.userId, userIdInt), eq(friends.friendId, friendIdInt)),
+                        and(eq(friends.userId, friendIdInt), eq(friends.friendId, userIdInt))
+                    ),
+                    eq(friends.status, 'accepted')
+                )
+            )
+            .limit(1);
+        
+        res.status(200).json({ 
+            success: true, 
+            areFriends: friendship.length > 0 
+        });
+    } catch (err) {
+        console.error('Check friendship error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error checking friendship', 
+            error: err 
+        });
+    }
 });
 
 export default router;

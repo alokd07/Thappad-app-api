@@ -58,7 +58,8 @@ export class PushNotificationService {
       slap: '👋',
       leg: '🦵',
       mukka: '👊',
-      love: '❤️'
+      love: '❤️',
+      xoxo: '😘'
     };
 
     const thappadMessages: Record<string, string> = {
@@ -111,6 +112,8 @@ export class PushNotificationService {
       emoji = '🦵';
     } else if (thappadTitle.toLowerCase().includes('thappad') || thappadTitle.toLowerCase().includes('slap') || thappadTitle.toLowerCase().includes('crying')) {
       emoji = '👋';
+    } else if (thappadTitle.toLowerCase().includes('xoxo')) {
+      emoji = '😘';
     }
 
     const notificationData: NotificationData = {

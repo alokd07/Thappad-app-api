@@ -4,8 +4,10 @@
   "description": "API for Thappad App",
   "main": "index.ts",
   "scripts": {
-    "start": "tsx index.ts",
     "dev": "tsx watch index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "vercel-build": "echo 'Build step for Vercel'",
     "migrate": "drizzle-kit push"
   },
   "author": "Alok Dubey",
@@ -13,6 +15,8 @@
   "dependencies": {
     "@libsql/client": "^0.15.10",
     "@types/node": "^24.1.0",
+    "@vendia/serverless-express": "^4.12.6",
+    "@vercel/node": "^5.3.11",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "drizzle-orm": "^0.44.4",
@@ -23,8 +27,9 @@
     "typescript": "^5.8.3"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
-    "drizzle-kit": "^0.31.4",
+    "drizzle-kit": "^0.18.1",
     "tsx": "^4.20.3"
   }
 }
