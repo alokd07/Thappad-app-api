@@ -50,7 +50,7 @@ router.post('/register', async (req: Request, res: Response) => {
         }).returning();
         
         // If expo push token provided, save device info
-        if (expoPushToken && PushNotificationService.validateExpoPushToken(expoPushToken)) {
+        if (expoPushToken && PushNotificationService.validateFCMToken(expoPushToken)) {
             await db.insert(userDevices).values({
                 userId: newUser[0].id,
                 expoPushToken,
@@ -103,7 +103,7 @@ router.post('/login', async (req: Request, res: Response) => {
         }
         
         // Update user's push token if provided
-        if (expoPushToken && PushNotificationService.validateExpoPushToken(expoPushToken)) {
+        if (expoPushToken && PushNotificationService.validateFCMToken(expoPushToken)) {
             await db.update(users)
                 .set({ 
                     expoPushToken,
@@ -448,14 +448,14 @@ router.put('/users/:userId/push-token', async (req: Request, res: Response) => {
     if (!expoPushToken) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Missing expoPushToken' 
+            message: 'Missing FCM token' 
         });
     }
     
-    if (!PushNotificationService.validateExpoPushToken(expoPushToken)) {
+    if (!PushNotificationService.validateFCMToken(expoPushToken)) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Invalid Expo push token format' 
+            message: 'Invalid FCM token format' 
         });
     }
     
@@ -514,24 +514,23 @@ router.post('/send-notification', async (req: Request, res: Response) => {
     if (!expoPushToken || !title || !body) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Missing required fields: expoPushToken, title, body' 
+            message: 'Missing required fields: fcmToken, title, body' 
         });
     }
     
-    if (!PushNotificationService.validateExpoPushToken(expoPushToken)) {
+    if (!PushNotificationService.validateFCMToken(expoPushToken)) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Invalid Expo push token format' 
+            message: 'Invalid FCM token format' 
         });
     }
     
     try {
         const success = await PushNotificationService.sendNotification({
-            to: expoPushToken,
-            sound: 'default',
+            token: expoPushToken,
             title,
             body,
-            data: data || {}
+            data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
         });
         
         if (success) {
@@ -763,13 +762,12 @@ router.post('/friends/request', async (req: Request, res: Response) => {
         // Send push notification if friend has a push token
         if (friend[0].expoPushToken) {
             await PushNotificationService.sendNotification({
-                to: friend[0].expoPushToken,
-                sound: 'default',
+                token: friend[0].expoPushToken,
                 title: 'Friend Request',
                 body: `${user[0].name} sent you a friend request`,
                 data: {
                     type: 'friend_request',
-                    userId,
+                    userId: userId.toString(),
                     userName: user[0].name
                 }
             });
